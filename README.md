@@ -357,34 +357,21 @@ spring.ai.vectorstore.qdrant.use-tls=true
 
 ## Testing with Postman
 
-### 1. Health Check
-```
-GET http://localhost:8080/api/kotlin-chatbot/health
-```
 
-### 2. Ask Question
+### 1. Ask Question
 ```
 POST http://localhost:8080/api/kotlin-chatbot/ask
 Content-Type: application/json
 
-{
-    "question": "How do I create a data class in Kotlin?"
-}
 ```
 
-### 3. Test Vector Search Quality
+### 2. Test Vector Search Quality
 ```json
 {
     "question": "What are coroutines in Kotlin and how do I use them?"
 }
 ```
 
-### 4. Test Edge Cases
-```json
-{
-    "question": "How do I implement dependency injection in Android?"
-}
-```
 
 ## Key Spring AI Features Demonstrated
 

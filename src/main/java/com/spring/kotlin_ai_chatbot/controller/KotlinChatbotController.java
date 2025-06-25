@@ -72,11 +72,6 @@ public class KotlinChatbotController {
         return askQuestion(request);
     }
 
-    @GetMapping("/health")
-    public ResponseEntity<String> healthCheck() {
-        return ResponseEntity.ok("Kotlin Chatbot is running successfully!");
-    }
-
     @GetMapping("/info")
     public ResponseEntity<ChatbotInfo> getChatbotInfo() {
         ChatbotInfo info = new ChatbotInfo(
