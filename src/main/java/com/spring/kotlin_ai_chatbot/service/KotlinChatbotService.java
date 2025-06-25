@@ -55,6 +55,8 @@ public class KotlinChatbotService {
         this.chatModel = chatModel;
         this.vectorStore = vectorStore;
         this.maxContextDocuments = maxContextDocuments;
+        
+        logger.info("KotlinChatbotService initialized with max context documents: {}", maxContextDocuments);
     }
 
     public ChatbotResponse askQuestion(String question) {
@@ -63,58 +65,70 @@ public class KotlinChatbotService {
         try {
             logger.info("Processing question: {}", question);
 
+            if (question == null || question.trim().isEmpty()) {
+                return ChatbotResponse.error("Question cannot be empty");
+            }
+
             List<Document> relevantDocs = findRelevantDocuments(question);
             logger.info("Found {} relevant documents", relevantDocs.size());
 
             if (relevantDocs.isEmpty()) {
                 return ChatbotResponse.error("I couldn't find relevant information in my Kotlin knowledge base. " +
-                        "Please ask questions related to Kotlin programming.");
+                        "Please ask questions related to Kotlin programming, or ensure the knowledge base is properly loaded.");
             }
 
-            // Create context from relevant documents
             String context = createContextFromDocuments(relevantDocs);
+            logger.debug("Created context with {} characters", context.length());
 
-            // Generate response using the chat model
             String answer = generateAnswer(question, context);
 
-            // Calculate confidence based on relevance scores and content quality
             String confidence = calculateConfidence(relevantDocs, answer);
 
             long responseTime = System.currentTimeMillis() - startTime;
 
-            logger.info("Generated response in {}ms with {} context documents",
-                    responseTime, relevantDocs.size());
+            logger.info("Generated response in {}ms with {} context documents, confidence: {}", 
+                       responseTime, relevantDocs.size(), confidence);
 
             return ChatbotResponse.success(answer, confidence, relevantDocs.size(), responseTime);
 
         } catch (Exception e) {
-            logger.error("Error processing question: {}", e.getMessage(), e);
+            long responseTime = System.currentTimeMillis() - startTime;
+            logger.error("Error processing question after {}ms: {}", responseTime, e.getMessage(), e);
             return ChatbotResponse.error("I encountered an error while processing your question. Please try again.");
         }
     }
 
     private List<Document> findRelevantDocuments(String question) {
+        try {
+            SearchRequest searchRequest = SearchRequest
+                    .builder()
+                    .query(question)
+                    .topK(maxContextDocuments)
+                    .similarityThreshold(0.7)
+                    .build();
 
-        SearchRequest searchRequest = SearchRequest
-                .builder()
-                .query(question)
-                .topK(maxContextDocuments)
-                .similarityThreshold(0.7)
-                .build();
-
-        return vectorStore.similaritySearch(searchRequest);
+            List<Document> documents = vectorStore.similaritySearch(searchRequest);
+            logger.debug("Vector search returned {} documents for query: {}", documents.size(), question);
+            
+            return documents;
+        } catch (Exception e) {
+            logger.error("Error searching vector store: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to search knowledge base", e);
+        }
     }
 
     private String createContextFromDocuments(List<Document> documents) {
         return documents.stream()
                 .map(doc -> {
-
                     String content = doc.getText();
                     Map<String, Object> metadata = doc.getMetadata();
 
                     StringBuilder contextEntry = new StringBuilder();
                     if (metadata.containsKey("source")) {
                         contextEntry.append("Source: ").append(metadata.get("source")).append("\n");
+                    }
+                    if (metadata.containsKey("chunk_index")) {
+                        contextEntry.append("Section: ").append(metadata.get("chunk_index")).append("\n");
                     }
                     contextEntry.append(content).append("\n\n");
 
@@ -124,15 +138,23 @@ public class KotlinChatbotService {
     }
 
     private String generateAnswer(String question, String context) {
-        PromptTemplate promptTemplate = new PromptTemplate(KOTLIN_EXPERT_PROMPT);
-        Map<String, Object> promptVariables = Map.of(
-                "contex", context,
-                "question", question);
+        try {
+            PromptTemplate promptTemplate = new PromptTemplate(KOTLIN_EXPERT_PROMPT);
+            Map<String, Object> promptVariables = Map.of(
+                    "context", context,
+                    "question", question);
 
-        Prompt prompt = promptTemplate.create(promptVariables);
-        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(prompt);
+            Prompt prompt = promptTemplate.create(promptVariables);
+            org.springframework.ai.chat.model.ChatResponse response = chatModel.call(prompt);
 
-        return response.getResult().getOutput().getText();
+            String answer = response.getResult().getOutput().getText();
+            logger.debug("Generated answer with {} characters", answer.length());
+            
+            return answer;
+        } catch (Exception e) {
+            logger.error("Error generating answer with chat model: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to generate response", e);
+        }
     }
 
     private String calculateConfidence(List<Document> documents, String answer) {
@@ -141,13 +163,16 @@ public class KotlinChatbotService {
         }
 
         int docCount = documents.size();
+        int answerLength = answer != null ? answer.length() : 0;
 
-        if (docCount >= 3 && answer.length() > 200) {
+        if (docCount >= 4 && answerLength > 300) {
             return "HIGH";
-        } else if (docCount >= 2 && answer.length() > 100) {
+        } else if (docCount >= 2 && answerLength > 150) {
             return "MEDIUM";
-        } else {
+        } else if (docCount >= 1 && answerLength > 50) {
             return "LOW";
+        } else {
+            return "VERY_LOW";
         }
     }
 
