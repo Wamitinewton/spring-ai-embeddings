@@ -64,7 +64,6 @@ public class PdfProcessingService {
         BulkProcessingResult result = new BulkProcessingResult();
 
         try {
-            // Scan for PDF files in resources folder
             Resource[] pdfResources = findAllPdfResources();
             logger.info("Found {} PDF documents to process", pdfResources.length);
 
@@ -116,12 +115,10 @@ public class PdfProcessingService {
         try {
             logger.info("Starting PDF processing for resource: {}", pdfResource.getFilename());
 
-            // Read the PDF
             PagePdfDocumentReader pdfReader = new PagePdfDocumentReader(pdfResource);
             List<Document> documents = pdfReader.get();
             logger.info("Read {} pages from PDF", documents.size());
 
-            // Split the documents into smaller chunks
             TokenTextSplitter textSplitter = new TokenTextSplitter(chunkSize, chunkOverlap, 5, 10000, true);
             List<Document> chunks = textSplitter.apply(documents);
             logger.info("Created {} chunks from PDF content", chunks.size());

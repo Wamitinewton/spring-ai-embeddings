@@ -168,19 +168,19 @@ public class ProgrammingChatbotService {
                     StringBuilder contextEntry = new StringBuilder();
                     
                     if (metadata.containsKey("source")) {
-                        contextEntry.append("📄 Source: ").append(metadata.get("source")).append("\n");
+                        contextEntry.append("Source: ").append(metadata.get("source")).append("\n");
                     }
                     if (metadata.containsKey("primary_language")) {
-                        contextEntry.append("🔤 Language: ").append(metadata.get("primary_language")).append("\n");
+                        contextEntry.append("Language: ").append(metadata.get("primary_language")).append("\n");
                     }
                     if (metadata.containsKey("document_category")) {
-                        contextEntry.append("📂 Category: ").append(metadata.get("document_category")).append("\n");
+                        contextEntry.append("Category: ").append(metadata.get("document_category")).append("\n");
                     }
                     if (metadata.containsKey("chunk_index")) {
-                        contextEntry.append("📑 Section: ").append(metadata.get("chunk_index")).append("\n");
+                        contextEntry.append("Section: ").append(metadata.get("chunk_index")).append("\n");
                     }
                     
-                    contextEntry.append("📝 Content:\n").append(content).append("\n\n");
+                    contextEntry.append("Content:\n").append(content).append("\n\n");
 
                     return contextEntry.toString();
                 })
