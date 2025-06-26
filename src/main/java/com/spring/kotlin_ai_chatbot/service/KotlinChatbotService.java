@@ -31,22 +31,35 @@ public class KotlinChatbotService {
             You are a highly knowledgeable Kotlin expert and teacher. Your goal is to provide accurate,
             comprehensive, and educational answers about Kotlin programming.
 
-            Based on the provided context from official Kotlin documentation, answer the user's question.
+            You have access to additional context from Kotlin documentation when available, but you should
+            also use your extensive knowledge of Kotlin to answer questions even when specific context isn't provided.
 
             Guidelines:
-            1. Provide clear, accurate, and well-structured answers
-            2. Include code examples when relevant
-            3. Explain concepts in a teaching manner
-            4. If the context doesn't contain enough information, say so clearly
-            5. Focus specifically on Kotlin-related topics
-            6. Structure your response in a clear, educational format
+            1. Start with a brief, clear summary (1-2 sentences)
+            2. Use clear section headings (e.g., ## Implementation Steps, ## Key Concepts)
+            3. Include practical code examples in proper code blocks with language specified
+            4. Keep explanations concise but comprehensive
+            5. Use numbered steps for implementation guides
+            6. End with a brief conclusion or key takeaway
+            7. Format code properly: ```kotlin for Kotlin code, ```gradle for Gradle files
+            8. Focus on practical, actionable advice
 
-            Context from Kotlin Documentation:
-            {context}
+            Structure your response like this:
+            - Brief summary paragraph
+            - Main content with clear headings
+            - Code examples with descriptions
+            - Conclusion/key points
+
+            {context_section}
 
             User Question: {question}
 
             Answer:
+            """;
+
+    private static final String CONTEXT_TEMPLATE = """
+            Additional Context from Kotlin Documentation:
+            {context}
             """;
 
     public KotlinChatbotService(ChatModel chatModel,
@@ -72,15 +85,16 @@ public class KotlinChatbotService {
             List<Document> relevantDocs = findRelevantDocuments(question);
             logger.info("Found {} relevant documents", relevantDocs.size());
 
-            if (relevantDocs.isEmpty()) {
-                return ChatbotResponse.error("I couldn't find relevant information in my Kotlin knowledge base. " +
-                        "Please ask questions related to Kotlin programming, or ensure the knowledge base is properly loaded.");
+            String contextSection = "";
+            if (!relevantDocs.isEmpty()) {
+                String context = createContextFromDocuments(relevantDocs);
+                contextSection = CONTEXT_TEMPLATE.replace("{context}", context);
+                logger.debug("Created context with {} characters", context.length());
+            } else {
+                logger.info("No relevant documents found, proceeding with general Kotlin knowledge");
             }
 
-            String context = createContextFromDocuments(relevantDocs);
-            logger.debug("Created context with {} characters", context.length());
-
-            String answer = generateAnswer(question, context);
+            String answer = generateAnswer(question, contextSection);
 
             String confidence = calculateConfidence(relevantDocs, answer);
 
@@ -104,7 +118,7 @@ public class KotlinChatbotService {
                     .builder()
                     .query(question)
                     .topK(maxContextDocuments)
-                    .similarityThreshold(0.7)
+                    .similarityThreshold(0.6)
                     .build();
 
             List<Document> documents = vectorStore.similaritySearch(searchRequest);
@@ -112,8 +126,8 @@ public class KotlinChatbotService {
             
             return documents;
         } catch (Exception e) {
-            logger.error("Error searching vector store: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to search knowledge base", e);
+            logger.warn("Error searching vector store (continuing without context): {}", e.getMessage());
+            return List.of();
         }
     }
 
@@ -137,11 +151,11 @@ public class KotlinChatbotService {
                 .collect(Collectors.joining("\n" + "=".repeat(50) + "\n"));
     }
 
-    private String generateAnswer(String question, String context) {
+    private String generateAnswer(String question, String contextSection) {
         try {
             PromptTemplate promptTemplate = new PromptTemplate(KOTLIN_EXPERT_PROMPT);
             Map<String, Object> promptVariables = Map.of(
-                    "context", context,
+                    "context_section", contextSection,
                     "question", question);
 
             Prompt prompt = promptTemplate.create(promptVariables);
@@ -158,18 +172,16 @@ public class KotlinChatbotService {
     }
 
     private String calculateConfidence(List<Document> documents, String answer) {
-        if (documents.isEmpty()) {
-            return "LOW";
-        }
-
         int docCount = documents.size();
         int answerLength = answer != null ? answer.length() : 0;
 
-        if (docCount >= 4 && answerLength > 300) {
+        if (docCount >= 3 && answerLength > 300) {
             return "HIGH";
-        } else if (docCount >= 2 && answerLength > 150) {
+        } else if (docCount >= 1 && answerLength > 200) {
             return "MEDIUM";
-        } else if (docCount >= 1 && answerLength > 50) {
+        } else if (answerLength > 100) {
+            return "MEDIUM";
+        } else if (answerLength > 50) {
             return "LOW";
         } else {
             return "VERY_LOW";
