@@ -25,11 +25,9 @@ public class QuizSession {
     private LocalDateTime lastActivity;
     private boolean completed = false;
     
-    // Constants
     public static final int TOTAL_QUESTIONS = 5;
     public static final int SESSION_TIMEOUT_MINUTES = 30;
 
-    // Constructor for Jackson deserialization
     @JsonCreator
     public QuizSession(@JsonProperty("sessionId") String sessionId, 
                        @JsonProperty("difficulty") String difficulty,
@@ -160,9 +158,7 @@ public class QuizSession {
         this.lastActivity = LocalDateTime.now();
     }
 
-    /**
-     * Marks session as completed
-     */
+  
     public void complete() {
         this.completed = true;
         updateActivity();

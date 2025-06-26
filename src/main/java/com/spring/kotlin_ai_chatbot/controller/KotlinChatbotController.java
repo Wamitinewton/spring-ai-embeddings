@@ -120,7 +120,6 @@ public class KotlinChatbotController {
         logger.info("Submitting answer for session: {} with answer: {}", request.getSessionId(), request.getAnswer());
 
         try {
-            // Keep session alive
             quizService.keepSessionAlive(request.getSessionId());
 
             QuizAnswerResponse response = quizService.submitAnswer(request.getSessionId(), request.getAnswer());
