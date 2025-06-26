@@ -203,10 +203,8 @@ public class KotlinQuizService {
             
             logger.debug("Generating question {} for topic: {} with code: {}", questionNumber, topic, includeCode);
 
-            // Get context from vector store
             String context = getTopicContext(topic);
             
-            // Generate question using AI
             String questionJson = callAiForQuestion(topic, difficulty, includeCode, context);
             
             return parseQuestionJson(questionJson, questionNumber);
@@ -265,7 +263,6 @@ public class KotlinQuizService {
     }
 
     private QuizQuestion parseQuestionJson(String jsonResponse, int questionNumber) throws JsonProcessingException {
-        // Clean JSON response
         String cleanJson = jsonResponse
                 .replaceFirst("^```json\\s*", "")
                 .replaceFirst("```\\s*$", "")
