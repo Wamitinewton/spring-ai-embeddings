@@ -33,10 +33,22 @@ public class QuizSessionService {
         QuizSession session = new QuizSession(sessionId, difficulty);
         
         String key = getSessionKey(sessionId);
-        redisTemplate.opsForValue().set(key, session, SESSION_TTL);
-        
-        logger.info("Created new quiz session {} with difficulty: {}", sessionId, difficulty);
-        return session;
+        try {
+            redisTemplate.opsForValue().set(key, session, SESSION_TTL);
+            logger.info("Created new quiz session {} with difficulty: {}", sessionId, difficulty);
+            
+            // Verify the session was saved correctly
+            Object saved = redisTemplate.opsForValue().get(key);
+            if (saved == null) {
+                logger.error("Failed to save session {} to Redis", sessionId);
+                throw new RuntimeException("Failed to create session in Redis");
+            }
+            
+            return session;
+        } catch (Exception e) {
+            logger.error("Error creating session {}: {}", sessionId, e.getMessage(), e);
+            throw new RuntimeException("Failed to create quiz session", e);
+        }
     }
 
     /**
@@ -44,22 +56,35 @@ public class QuizSessionService {
      */
     public Optional<QuizSession> getSession(String sessionId) {
         String key = getSessionKey(sessionId);
-        Object sessionObj = redisTemplate.opsForValue().get(key);
         
-        if (sessionObj instanceof QuizSession session) {
-            // Check if session has expired
-            if (session.isExpired()) {
-                logger.info("Session {} has expired, removing from Redis", sessionId);
-                deleteSession(sessionId);
+        try {
+            Object sessionObj = redisTemplate.opsForValue().get(key);
+            logger.debug("Retrieved object from Redis for key {}: {}", key, sessionObj != null ? sessionObj.getClass().getSimpleName() : "null");
+            
+            if (sessionObj == null) {
+                logger.info("Session {} not found in Redis", sessionId);
                 return Optional.empty();
             }
             
-            logger.debug("Retrieved session {} from Redis", sessionId);
-            return Optional.of(session);
+            if (sessionObj instanceof QuizSession session) {
+                // Check if session has expired
+                if (session.isExpired()) {
+                    logger.info("Session {} has expired, removing from Redis", sessionId);
+                    deleteSession(sessionId);
+                    return Optional.empty();
+                }
+                
+                logger.debug("Retrieved valid session {} from Redis", sessionId);
+                return Optional.of(session);
+            } else {
+                logger.warn("Object in Redis for key {} is not a QuizSession: {}", key, sessionObj.getClass());
+                return Optional.empty();
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error retrieving session {}: {}", sessionId, e.getMessage(), e);
+            return Optional.empty();
         }
-        
-        logger.debug("Session {} not found in Redis", sessionId);
-        return Optional.empty();
     }
 
     /**
@@ -70,14 +95,27 @@ public class QuizSessionService {
             throw new IllegalArgumentException("Session and session ID cannot be null");
         }
         
-        session.updateActivity();
-        String key = getSessionKey(session.getSessionId());
-        
-        // If session is completed, store with longer TTL for final summary
-        Duration ttl = session.isCompleted() ? Duration.ofHours(2) : SESSION_TTL;
-        redisTemplate.opsForValue().set(key, session, ttl);
-        
-        logger.debug("Updated session {} in Redis", session.getSessionId());
+        try {
+            session.updateActivity();
+            String key = getSessionKey(session.getSessionId());
+            
+            // If session is completed, store with longer TTL for final summary
+            Duration ttl = session.isCompleted() ? Duration.ofHours(2) : SESSION_TTL;
+            redisTemplate.opsForValue().set(key, session, ttl);
+            
+            logger.debug("Updated session {} in Redis", session.getSessionId());
+            
+            // Verify the update
+            Object updated = redisTemplate.opsForValue().get(key);
+            if (updated == null) {
+                logger.error("Failed to update session {} in Redis", session.getSessionId());
+                throw new RuntimeException("Failed to update session in Redis");
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error updating session {}: {}", session.getSessionId(), e.getMessage(), e);
+            throw new RuntimeException("Failed to update quiz session", e);
+        }
     }
 
     /**
@@ -85,12 +123,16 @@ public class QuizSessionService {
      */
     public void deleteSession(String sessionId) {
         String key = getSessionKey(sessionId);
-        Boolean deleted = redisTemplate.delete(key);
-        
-        if (Boolean.TRUE.equals(deleted)) {
-            logger.info("Deleted session {} from Redis", sessionId);
-        } else {
-            logger.warn("Failed to delete session {} from Redis", sessionId);
+        try {
+            Boolean deleted = redisTemplate.delete(key);
+            
+            if (Boolean.TRUE.equals(deleted)) {
+                logger.info("Deleted session {} from Redis", sessionId);
+            } else {
+                logger.warn("Failed to delete session {} from Redis", sessionId);
+            }
+        } catch (Exception e) {
+            logger.error("Error deleting session {}: {}", sessionId, e.getMessage(), e);
         }
     }
 
@@ -99,35 +141,47 @@ public class QuizSessionService {
      */
     public void extendSession(String sessionId) {
         String key = getSessionKey(sessionId);
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
-            redisTemplate.expire(key, SESSION_TTL);
-            logger.debug("Extended TTL for session {}", sessionId);
+        try {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+                redisTemplate.expire(key, SESSION_TTL);
+                logger.debug("Extended TTL for session {}", sessionId);
+            }
+        } catch (Exception e) {
+            logger.error("Error extending session {}: {}", sessionId, e.getMessage(), e);
         }
     }
 
-
     public long getActiveSessionCount() {
-        Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
-        return keys != null ? keys.size() : 0;
+        try {
+            Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
+            return keys != null ? keys.size() : 0;
+        } catch (Exception e) {
+            logger.error("Error getting active session count: {}", e.getMessage(), e);
+            return 0;
+        }
     }
 
     public void cleanupExpiredSessions() {
-        Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
-        if (keys == null || keys.isEmpty()) {
-            return;
-        }
-
-        int deletedCount = 0;
-        for (String key : keys) {
-            Object sessionObj = redisTemplate.opsForValue().get(key);
-            if (sessionObj instanceof QuizSession session && session.isExpired()) {
-                redisTemplate.delete(key);
-                deletedCount++;
+        try {
+            Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
+            if (keys == null || keys.isEmpty()) {
+                return;
             }
-        }
 
-        if (deletedCount > 0) {
-            logger.info("Cleaned up {} expired quiz sessions", deletedCount);
+            int deletedCount = 0;
+            for (String key : keys) {
+                Object sessionObj = redisTemplate.opsForValue().get(key);
+                if (sessionObj instanceof QuizSession session && session.isExpired()) {
+                    redisTemplate.delete(key);
+                    deletedCount++;
+                }
+            }
+
+            if (deletedCount > 0) {
+                logger.info("Cleaned up {} expired quiz sessions", deletedCount);
+            }
+        } catch (Exception e) {
+            logger.error("Error during session cleanup: {}", e.getMessage(), e);
         }
     }
 
@@ -142,28 +196,33 @@ public class QuizSessionService {
      * Gets session statistics for monitoring
      */
     public SessionStats getSessionStats() {
-        Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
-        if (keys == null || keys.isEmpty()) {
-            return new SessionStats(0, 0, 0);
-        }
+        try {
+            Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
+            if (keys == null || keys.isEmpty()) {
+                return new SessionStats(0, 0, 0);
+            }
 
-        int total = 0;
-        int active = 0;
-        int completed = 0;
+            int total = 0;
+            int active = 0;
+            int completed = 0;
 
-        for (String key : keys) {
-            Object sessionObj = redisTemplate.opsForValue().get(key);
-            if (sessionObj instanceof QuizSession session) {
-                total++;
-                if (session.isCompleted()) {
-                    completed++;
-                } else if (!session.isExpired()) {
-                    active++;
+            for (String key : keys) {
+                Object sessionObj = redisTemplate.opsForValue().get(key);
+                if (sessionObj instanceof QuizSession session) {
+                    total++;
+                    if (session.isCompleted()) {
+                        completed++;
+                    } else if (!session.isExpired()) {
+                        active++;
+                    }
                 }
             }
-        }
 
-        return new SessionStats(total, active, completed);
+            return new SessionStats(total, active, completed);
+        } catch (Exception e) {
+            logger.error("Error getting session stats: {}", e.getMessage(), e);
+            return new SessionStats(0, 0, 0);
+        }
     }
 
     private String generateSessionId() {

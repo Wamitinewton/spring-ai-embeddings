@@ -1,8 +1,9 @@
 package com.spring.kotlin_ai_chatbot.data;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.spring.kotlin_ai_chatbot.dto.QuizQuestion;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,10 +11,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class QuizSession {
     
     private String sessionId;
@@ -30,11 +29,38 @@ public class QuizSession {
     public static final int TOTAL_QUESTIONS = 5;
     public static final int SESSION_TIMEOUT_MINUTES = 30;
 
+    // Constructor for Jackson deserialization
+    @JsonCreator
+    public QuizSession(@JsonProperty("sessionId") String sessionId, 
+                       @JsonProperty("difficulty") String difficulty,
+                       @JsonProperty("questions") List<QuizQuestion> questions,
+                       @JsonProperty("userAnswers") List<String> userAnswers,
+                       @JsonProperty("currentQuestionIndex") int currentQuestionIndex,
+                       @JsonProperty("score") int score,
+                       @JsonProperty("startTime") LocalDateTime startTime,
+                       @JsonProperty("lastActivity") LocalDateTime lastActivity,
+                       @JsonProperty("completed") boolean completed) {
+        this.sessionId = sessionId;
+        this.difficulty = difficulty;
+        this.questions = questions != null ? questions : new ArrayList<>();
+        this.userAnswers = userAnswers != null ? userAnswers : new ArrayList<>();
+        this.currentQuestionIndex = currentQuestionIndex;
+        this.score = score;
+        this.startTime = startTime != null ? startTime : LocalDateTime.now();
+        this.lastActivity = lastActivity != null ? lastActivity : LocalDateTime.now();
+        this.completed = completed;
+    }
+
     public QuizSession(String sessionId, String difficulty) {
         this.sessionId = sessionId;
         this.difficulty = difficulty;
+        this.questions = new ArrayList<>();
+        this.userAnswers = new ArrayList<>();
+        this.currentQuestionIndex = 0;
+        this.score = 0;
         this.startTime = LocalDateTime.now();
         this.lastActivity = LocalDateTime.now();
+        this.completed = false;
     }
 
     /**
@@ -142,7 +168,6 @@ public class QuizSession {
         updateActivity();
     }
 
-   
     @JsonIgnore
     public String getStatus() {
         if (completed) {
