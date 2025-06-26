@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class QuizSessionResponse {
     private String sessionId;
+    private String language;
+    private String languageDisplayName;
     private String difficulty;
     private QuizQuestion currentQuestion;
     private int totalQuestions;
@@ -18,11 +20,13 @@ public class QuizSessionResponse {
     private boolean successful;
     private String errorMessage;
 
-    public static QuizSessionResponse success(String sessionId, String difficulty, 
+    public static QuizSessionResponse success(String sessionId, String language, String difficulty, 
                                             QuizQuestion currentQuestion, int currentQuestionNumber, 
                                             int score, boolean isComplete) {
         QuizSessionResponse response = new QuizSessionResponse();
         response.sessionId = sessionId;
+        response.language = language;
+        response.languageDisplayName = getLanguageDisplayName(language);
         response.difficulty = difficulty;
         response.currentQuestion = currentQuestion;
         response.totalQuestions = 5;
@@ -47,15 +51,32 @@ public class QuizSessionResponse {
                 currentQuestion.getQuestion(),
                 currentQuestion.getCodeSnippet(),
                 currentQuestion.getOptions(),
-                null, 
-                null  
+                null, // Hide correct answer from user
+                null  // Hide explanation until after answer
             );
             
-            return new QuizSessionResponse(sessionId, difficulty, userQuestion, 
+            return new QuizSessionResponse(sessionId, language, languageDisplayName, difficulty, userQuestion, 
                                          totalQuestions, currentQuestionNumber, score, 
                                          isComplete, successful, errorMessage);
         }
         return this;
     }
-}
 
+    private static String getLanguageDisplayName(String language) {
+        if (language == null) return "Programming";
+        
+        return switch (language.toLowerCase()) {
+            case "kotlin" -> "Kotlin";
+            case "java" -> "Java";
+            case "python" -> "Python";
+            case "javascript" -> "JavaScript";
+            case "typescript" -> "TypeScript";
+            case "csharp" -> "C#";
+            case "cpp" -> "C++";
+            case "rust" -> "Rust";
+            case "go" -> "Go";
+            case "swift" -> "Swift";
+            default -> "Programming";
+        };
+    }
+}

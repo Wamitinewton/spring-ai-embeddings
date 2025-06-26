@@ -16,6 +16,7 @@ import java.util.List;
 public class QuizSession {
     
     private String sessionId;
+    private String language;
     private String difficulty;
     private List<QuizQuestion> questions = new ArrayList<>();
     private List<String> userAnswers = new ArrayList<>();
@@ -29,7 +30,8 @@ public class QuizSession {
     public static final int SESSION_TIMEOUT_MINUTES = 30;
 
     @JsonCreator
-    public QuizSession(@JsonProperty("sessionId") String sessionId, 
+    public QuizSession(@JsonProperty("sessionId") String sessionId,
+                       @JsonProperty("language") String language,
                        @JsonProperty("difficulty") String difficulty,
                        @JsonProperty("questions") List<QuizQuestion> questions,
                        @JsonProperty("userAnswers") List<String> userAnswers,
@@ -39,7 +41,8 @@ public class QuizSession {
                        @JsonProperty("lastActivity") LocalDateTime lastActivity,
                        @JsonProperty("completed") boolean completed) {
         this.sessionId = sessionId;
-        this.difficulty = difficulty;
+        this.language = language != null ? language : "python";
+        this.difficulty = difficulty != null ? difficulty : "beginner";
         this.questions = questions != null ? questions : new ArrayList<>();
         this.userAnswers = userAnswers != null ? userAnswers : new ArrayList<>();
         this.currentQuestionIndex = currentQuestionIndex;
@@ -49,9 +52,10 @@ public class QuizSession {
         this.completed = completed;
     }
 
-    public QuizSession(String sessionId, String difficulty) {
+    public QuizSession(String sessionId, String language, String difficulty) {
         this.sessionId = sessionId;
-        this.difficulty = difficulty;
+        this.language = language != null ? language : "python";
+        this.difficulty = difficulty != null ? difficulty : "beginner";
         this.questions = new ArrayList<>();
         this.userAnswers = new ArrayList<>();
         this.currentQuestionIndex = 0;
@@ -158,12 +162,17 @@ public class QuizSession {
         this.lastActivity = LocalDateTime.now();
     }
 
-  
+    /**
+     * Marks session as complete
+     */
     public void complete() {
         this.completed = true;
         updateActivity();
     }
 
+    /**
+     * Gets session status
+     */
     @JsonIgnore
     public String getStatus() {
         if (completed) {
@@ -173,5 +182,25 @@ public class QuizSession {
         } else {
             return "ACTIVE";
         }
+    }
+
+    /**
+     * Gets language display name for UI
+     */
+    @JsonIgnore
+    public String getLanguageDisplayName() {
+        return switch (language.toLowerCase()) {
+            case "kotlin" -> "Kotlin";
+            case "java" -> "Java";
+            case "python" -> "Python";
+            case "javascript" -> "JavaScript";
+            case "typescript" -> "TypeScript";
+            case "csharp" -> "C#";
+            case "cpp" -> "C++";
+            case "rust" -> "Rust";
+            case "go" -> "Go";
+            case "swift" -> "Swift";
+            default -> "Programming";
+        };
     }
 }

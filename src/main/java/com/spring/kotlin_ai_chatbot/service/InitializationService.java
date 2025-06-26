@@ -25,27 +25,25 @@ public class InitializationService implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        logger.info("🚀 Initializing Multi-Language Programming Assistant");
-        logger.info("📚 Auto-load PDFs: {}", autoLoadPdfs);
-        logger.info("🔢 Enable Embedding Generation: {}", enableEmbeddingGeneration);
+        // logger.info("🚀 Initializing Multi-Language Programming Assistant");
+        // logger.info("📚 Auto-load PDFs: {}", autoLoadPdfs);
+        // logger.info("🔢 Enable Embedding Generation: {}", enableEmbeddingGeneration);
         
-        if (!enableEmbeddingGeneration) {
-            logger.info("⏸️ Embedding generation is disabled. The application will use existing embeddings or work without document context.");
-            logger.info("💡 To enable embedding generation, set app.initialization.enable-embedding-generation=true");
-            return;
-        }
+        // if (!enableEmbeddingGeneration) {
+        //     logger.info("⏸️ Embedding generation is disabled. The application will use existing embeddings or work without document context.");
+        //     logger.info("💡 To enable embedding generation, set app.initialization.enable-embedding-generation=true");
+        //     return;
+        // }
 
-        if (autoLoadPdfs) {
-            loadAllDocuments();
-        } else {
-            logger.info("📋 Auto-loading of PDFs is disabled. Documents can be loaded manually via the admin endpoints.");
-            logger.info("💡 To enable auto-loading, set app.initialization.auto-load-pdfs=true");
-        }
+        // if (autoLoadPdfs) {
+        //     loadAllDocuments();
+        // } else {
+        //     logger.info("📋 Auto-loading of PDFs is disabled. Documents can be loaded manually via the admin endpoints.");
+        //     logger.info("💡 To enable auto-loading, set app.initialization.auto-load-pdfs=true");
+        // }
     }
 
-    /**
-     * Loads all PDF documents from the resources folder
-     */
+  
     public void loadAllDocuments() {
         try {
             logger.info("🔍 Scanning for PDF documents in resources folder...");
@@ -58,7 +56,6 @@ public class InitializationService implements CommandLineRunner {
                 return;
             }
 
-            // Log detailed results
             logProcessingResults(result);
             
         } catch (Exception e) {
@@ -66,9 +63,6 @@ public class InitializationService implements CommandLineRunner {
         }
     }
 
-    /**
-     * Manually reload all documents (useful for admin operations)
-     */
     public PdfProcessingService.BulkProcessingResult reloadAllDocuments() {
         logger.info("🔄 Manually reloading all PDF documents...");
         
@@ -82,9 +76,6 @@ public class InitializationService implements CommandLineRunner {
         return result;
     }
 
-    /**
-     * Logs comprehensive processing results
-     */
     private void logProcessingResults(PdfProcessingService.BulkProcessingResult result) {
         logger.info("📊 === DOCUMENT PROCESSING SUMMARY ===");
         logger.info("⏱️  Total Processing Time: {}ms", result.getTotalProcessingTimeMs());
@@ -93,7 +84,6 @@ public class InitializationService implements CommandLineRunner {
         logger.info("📄 Total Chunks Created: {}", result.getTotalChunks());
         
         if (result.getSuccessfulCount() > 0) {
-            logger.info("📚 === SUCCESSFULLY PROCESSED DOCUMENTS ===");
             result.getSuccessfulDocuments().forEach((filename, processingResult) -> {
                 logger.info("✅ {} - {} pages, {} chunks, {}ms", 
                            filename, 
@@ -126,9 +116,7 @@ public class InitializationService implements CommandLineRunner {
 
     }
 
-    /**
-     * Get current initialization status
-     */
+ 
     public InitializationStatus getStatus() {
         return new InitializationStatus(
             autoLoadPdfs,
@@ -137,9 +125,6 @@ public class InitializationService implements CommandLineRunner {
         );
     }
 
-    /**
-     * Data class for initialization status
-     */
     public record InitializationStatus(
         boolean autoLoadEnabled,
         boolean embeddingGenerationEnabled,

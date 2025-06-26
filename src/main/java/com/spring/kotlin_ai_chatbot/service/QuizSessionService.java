@@ -26,16 +26,17 @@ public class QuizSessionService {
     }
 
     /**
-     * Creates a new quiz session and stores it in Redis
+     * Creates a new quiz session with language and difficulty and stores it in Redis
      */
-    public QuizSession createSession(String difficulty) {
+    public QuizSession createSession(String language, String difficulty) {
         String sessionId = generateSessionId();
-        QuizSession session = new QuizSession(sessionId, difficulty);
+        QuizSession session = new QuizSession(sessionId, language, difficulty);
         
         String key = getSessionKey(sessionId);
         try {
             redisTemplate.opsForValue().set(key, session, SESSION_TTL);
-            logger.info("Created new quiz session {} with difficulty: {}", sessionId, difficulty);
+            logger.info("Created new quiz session {} - Language: {}, Difficulty: {}", 
+                       sessionId, language, difficulty);
             
             // Verify the session was saved correctly
             Object saved = redisTemplate.opsForValue().get(key);
@@ -52,6 +53,13 @@ public class QuizSessionService {
     }
 
     /**
+     * Creates a new quiz session with default language (python)
+     */
+    public QuizSession createSession(String difficulty) {
+        return createSession("python", difficulty);
+    }
+
+    /**
      * Retrieves a session from Redis
      */
     public Optional<QuizSession> getSession(String sessionId) {
@@ -59,7 +67,8 @@ public class QuizSessionService {
         
         try {
             Object sessionObj = redisTemplate.opsForValue().get(key);
-            logger.debug("Retrieved object from Redis for key {}: {}", key, sessionObj != null ? sessionObj.getClass().getSimpleName() : "null");
+            logger.debug("Retrieved object from Redis for key {}: {}", 
+                        key, sessionObj != null ? sessionObj.getClass().getSimpleName() : "null");
             
             if (sessionObj == null) {
                 logger.info("Session {} not found in Redis", sessionId);
@@ -74,10 +83,12 @@ public class QuizSessionService {
                     return Optional.empty();
                 }
                 
-                logger.debug("Retrieved valid session {} from Redis", sessionId);
+                logger.debug("Retrieved valid session {} from Redis - Language: {}, Difficulty: {}", 
+                           sessionId, session.getLanguage(), session.getDifficulty());
                 return Optional.of(session);
             } else {
-                logger.warn("Object in Redis for key {} is not a QuizSession: {}", key, sessionObj.getClass());
+                logger.warn("Object in Redis for key {} is not a QuizSession: {}", 
+                           key, sessionObj.getClass());
                 return Optional.empty();
             }
             
@@ -103,7 +114,9 @@ public class QuizSessionService {
             Duration ttl = session.isCompleted() ? Duration.ofHours(2) : SESSION_TTL;
             redisTemplate.opsForValue().set(key, session, ttl);
             
-            logger.debug("Updated session {} in Redis", session.getSessionId());
+            logger.debug("Updated session {} in Redis - Language: {}, Score: {}/{}", 
+                        session.getSessionId(), session.getLanguage(), 
+                        session.getScore(), QuizSession.TOTAL_QUESTIONS);
             
             // Verify the update
             Object updated = redisTemplate.opsForValue().get(key);
@@ -151,6 +164,9 @@ public class QuizSessionService {
         }
     }
 
+    /**
+     * Gets count of active sessions
+     */
     public long getActiveSessionCount() {
         try {
             Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
@@ -161,6 +177,9 @@ public class QuizSessionService {
         }
     }
 
+    /**
+     * Cleans up expired sessions
+     */
     public void cleanupExpiredSessions() {
         try {
             Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
@@ -225,6 +244,38 @@ public class QuizSessionService {
         }
     }
 
+    /**
+     * Gets language-specific session statistics
+     */
+    public LanguageSessionStats getLanguageSessionStats() {
+        try {
+            Set<String> keys = redisTemplate.keys(SESSION_KEY_PREFIX + "*");
+            if (keys == null || keys.isEmpty()) {
+                return new LanguageSessionStats(java.util.Map.of(), java.util.Map.of());
+            }
+
+            java.util.Map<String, Integer> languageCounts = new java.util.HashMap<>();
+            java.util.Map<String, Integer> completedByLanguage = new java.util.HashMap<>();
+
+            for (String key : keys) {
+                Object sessionObj = redisTemplate.opsForValue().get(key);
+                if (sessionObj instanceof QuizSession session) {
+                    String language = session.getLanguage();
+                    languageCounts.merge(language, 1, Integer::sum);
+                    
+                    if (session.isCompleted()) {
+                        completedByLanguage.merge(language, 1, Integer::sum);
+                    }
+                }
+            }
+
+            return new LanguageSessionStats(languageCounts, completedByLanguage);
+        } catch (Exception e) {
+            logger.error("Error getting language session stats: {}", e.getMessage(), e);
+            return new LanguageSessionStats(java.util.Map.of(), java.util.Map.of());
+        }
+    }
+
     private String generateSessionId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
@@ -234,4 +285,9 @@ public class QuizSessionService {
     }
 
     public record SessionStats(int total, int active, int completed) {}
+    
+    public record LanguageSessionStats(
+        java.util.Map<String, Integer> sessionsByLanguage,
+        java.util.Map<String, Integer> completedByLanguage
+    ) {}
 }
