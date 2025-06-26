@@ -1,12 +1,10 @@
 package com.spring.kotlin_ai_chatbot.service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spring.kotlin_ai_chatbot.data.QuizSession;
+import com.spring.kotlin_ai_chatbot.dto.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
@@ -18,13 +16,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.spring.kotlin_ai_chatbot.dto.*;
-
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import java.util.*;
 
 @Service
 public class KotlinQuizService {
@@ -33,123 +25,153 @@ public class KotlinQuizService {
 
     private final ChatModel chatModel;
     private final VectorStore vectorStore;
+    private final QuizSessionService sessionService;
     private final ObjectMapper objectMapper;
     private final Random random;
     private final int maxContextDocuments;
-    
-    private final Map<String, QuizSession> activeSessions = new ConcurrentHashMap<>();
 
-    private static final QuizTopic[] QUIZ_TOPICS = {
-        new QuizTopic("variables and data types", 0.8),
-        new QuizTopic("functions and lambdas", 0.9),
-        new QuizTopic("classes and objects", 0.7),
-        new QuizTopic("inheritance and interfaces", 0.6),
-        new QuizTopic("coroutines", 0.9),
-        new QuizTopic("collections", 0.8),
-        new QuizTopic("null safety", 0.7),
-        new QuizTopic("extension functions", 0.9),
-        new QuizTopic("sealed classes", 0.8),
-        new QuizTopic("data classes", 0.7),
-        new QuizTopic("operators", 0.8),
-        new QuizTopic("scope functions", 0.9),
-        new QuizTopic("higher-order functions", 0.9),
-        new QuizTopic("generics", 0.7),
-        new QuizTopic("delegated properties", 0.8)
-    };
+    private static final Map<String, Double> QUIZ_TOPICS = Map.of(
+        "variables and data types", 0.8,
+        "functions and lambdas", 0.9,
+        "classes and objects", 0.7,
+        "coroutines", 0.9,
+        "collections", 0.8,
+        "null safety", 0.7,
+        "extension functions", 0.9,
+        "sealed classes", 0.8,
+        "data classes", 0.7,
+        "scope functions", 0.9
+    );
 
-    private static final String QUIZ_GENERATION_PROMPT = """
-            You are a Kotlin expert creating a quiz question. Generate a single multiple-choice question about Kotlin programming.
-
-            Topic focus: {topic}
+    private static final String QUIZ_PROMPT = """
+            Create a Kotlin quiz question focused on: {topic}
             Difficulty: {difficulty}
-            Include code snippet: {includeCode}
-
-            {context_section}
-
-            Requirements:
-            1. Create one clear, focused question about Kotlin
-            2. {codeInstruction}
-            3. Provide exactly 4 multiple choice options (A, B, C, D)
-            4. Make sure only ONE option is correct
-            5. Make the incorrect options plausible but clearly wrong
-            6. Keep the question practical and educational
-            7. Provide a clear, educational explanation
-
-            Respond ONLY with valid JSON. Use this structure:
-            - question: Your question text
-            - codeSnippet: Code if applicable or empty string
-            - options: Object with A, B, C, D properties
-            - correctAnswer: Single letter (A, B, C, or D)
-            - explanation: Clear explanation text
+            {codeInstruction}
+            
+            {context}
+            
+            Generate a clear, educational question with:
+            1. One focused question about Kotlin
+            2. Exactly 4 options (A, B, C, D) - only ONE correct
+            3. Practical, realistic scenarios
+            4. Clear explanation for learning
+            
+            Respond with valid JSON:
+            {{
+                "question": "Your question text",
+                "codeSnippet": "{codeSnippet}",
+                "options": {{
+                    "A": "Option A text",
+                    "B": "Option B text", 
+                    "C": "Option C text",
+                    "D": "Option D text"
+                }},
+                "correctAnswer": "{correctLetter}",
+                "explanation": "Educational explanation"
+            }}
             """;
 
     public KotlinQuizService(ChatModel chatModel,
                            VectorStore vectorStore,
+                           QuizSessionService sessionService,
                            @Value("${app.chatbot.max-context-documents:2}") int maxContextDocuments) {
         this.chatModel = chatModel;
         this.vectorStore = vectorStore;
+        this.sessionService = sessionService;
         this.objectMapper = new ObjectMapper();
         this.random = new Random();
         this.maxContextDocuments = maxContextDocuments;
         
-        logger.info("KotlinQuizService initialized");
+        logger.info("KotlinQuizService initialized with Redis session management");
     }
 
+    /**
+     * Starts a new quiz session
+     */
     public QuizSessionResponse startQuizSession(String difficulty) {
         try {
-            String sessionId = UUID.randomUUID().toString();
-            QuizSession session = new QuizSession(sessionId, difficulty);
+            QuizSession session = sessionService.createSession(difficulty);
             
             QuizQuestion firstQuestion = generateQuestion(difficulty, 1);
             session.addQuestion(firstQuestion);
+            sessionService.updateSession(session);
             
-            activeSessions.put(sessionId, session);
+            logger.info("Started quiz session {} with difficulty: {}", session.getSessionId(), difficulty);
             
-            logger.info("Started quiz session {} with difficulty: {}", sessionId, difficulty);
-            
-            return QuizSessionResponse.success(sessionId, difficulty, firstQuestion, 1, 0, false);
+            return QuizSessionResponse.success(
+                session.getSessionId(), 
+                difficulty, 
+                firstQuestion, 
+                1, 
+                0, 
+                false
+            );
             
         } catch (Exception e) {
             logger.error("Error starting quiz session: {}", e.getMessage(), e);
-            return QuizSessionResponse.error("Failed to start quiz session. Please try again.");
+            return QuizSessionResponse.error("Failed to start quiz. Please try again.");
         }
     }
 
+    /**
+     * Submits an answer and returns feedback with next question or summary
+     */
     public QuizAnswerResponse submitAnswer(String sessionId, String userAnswer) {
         try {
-            QuizSession session = activeSessions.get(sessionId);
-            if (session == null) {
-                return QuizAnswerResponse.error("Quiz session not found or expired");
+            Optional<QuizSession> sessionOpt = sessionService.getSession(sessionId);
+            if (sessionOpt.isEmpty()) {
+                return QuizAnswerResponse.error("Quiz session not found or expired. Please start a new quiz.");
             }
 
+            QuizSession session = sessionOpt.get();
             QuizQuestion currentQuestion = session.getCurrentQuestion();
-            boolean isCorrect = userAnswer.equalsIgnoreCase(currentQuestion.getCorrectAnswer());
             
-            if (isCorrect) {
-                session.incrementScore();
+            if (currentQuestion == null) {
+                return QuizAnswerResponse.error("No current question found. Session may be corrupted.");
             }
 
+            // Submit the answer
+            boolean isCorrect = session.submitAnswer(userAnswer);
+            
+            // Prepare response message
             String message = isCorrect 
                 ? "🎉 Correct! " + currentQuestion.getExplanation()
                 : "❌ Incorrect. " + currentQuestion.getExplanation();
 
-            boolean hasNextQuestion = session.getCurrentQuestionNumber() < 5;
-            QuizQuestion nextQuestion = null;
-            QuizSessionSummary summary = null;
-
-            if (hasNextQuestion) {
-                nextQuestion = generateQuestion(session.getDifficulty(), session.getCurrentQuestionNumber() + 1);
-                session.addQuestion(nextQuestion);
-            } else {
+            // Check if quiz is complete
+            if (!session.hasNextQuestion()) {
                 session.complete();
-                summary = QuizSessionSummary.create(sessionId, session.getDifficulty(), 
-                                                  session.getScore(), session.getCompletionTime());
-                activeSessions.remove(sessionId);
+                sessionService.updateSession(session);
+                
+                QuizSessionSummary summary = createSessionSummary(session);
+                
+                return QuizAnswerResponse.success(
+                    isCorrect, 
+                    message, 
+                    currentQuestion.getCorrectAnswer(),
+                    currentQuestion.getExplanation(), 
+                    session.getScore(),
+                    false, 
+                    null, 
+                    summary
+                );
             }
 
-            return QuizAnswerResponse.success(isCorrect, message, currentQuestion.getCorrectAnswer(),
-                                            currentQuestion.getExplanation(), session.getScore(),
-                                            hasNextQuestion, nextQuestion, summary);
+            // Generate next question
+            QuizQuestion nextQuestion = generateQuestion(session.getDifficulty(), session.getCurrentQuestionNumber());
+            session.addQuestion(nextQuestion);
+            sessionService.updateSession(session);
+
+            return QuizAnswerResponse.success(
+                isCorrect, 
+                message, 
+                currentQuestion.getCorrectAnswer(),
+                currentQuestion.getExplanation(), 
+                session.getScore(),
+                true, 
+                nextQuestion, 
+                null
+            );
 
         } catch (Exception e) {
             logger.error("Error submitting quiz answer: {}", e.getMessage(), e);
@@ -157,98 +179,112 @@ public class KotlinQuizService {
         }
     }
 
+    /**
+     * Gets current session status
+     */
+    public Optional<QuizSession> getSessionStatus(String sessionId) {
+        return sessionService.getSession(sessionId);
+    }
+
+    /**
+     * Extends session timeout when user is active
+     */
+    public void keepSessionAlive(String sessionId) {
+        sessionService.extendSession(sessionId);
+    }
+
     private QuizQuestion generateQuestion(String difficulty, int questionNumber) {
         try {
-            QuizTopic topic = QUIZ_TOPICS[random.nextInt(QUIZ_TOPICS.length)];
-            boolean includeCode = random.nextDouble() < topic.codeSnippetProbability;
+            List<String> topics = new ArrayList<>(QUIZ_TOPICS.keySet());
+            String topic = topics.get(random.nextInt(topics.size()));
+            double codeProb = QUIZ_TOPICS.get(topic);
             
-            logger.info("Generating question {} for topic: {} with code: {}", questionNumber, topic.name, includeCode);
-
-            String contextSection = getContextForTopic(topic.name);
-
-            String questionJson = generateQuestionJson(topic.name, difficulty, includeCode, contextSection);
+            boolean includeCode = random.nextDouble() < codeProb;
             
-            return parseQuestionFromJson(questionJson, questionNumber);
+            logger.debug("Generating question {} for topic: {} with code: {}", questionNumber, topic, includeCode);
+
+            // Get context from vector store
+            String context = getTopicContext(topic);
+            
+            // Generate question using AI
+            String questionJson = callAiForQuestion(topic, difficulty, includeCode, context);
+            
+            return parseQuestionJson(questionJson, questionNumber);
 
         } catch (Exception e) {
-            logger.error("Error generating quiz question: {}", e.getMessage(), e);
+            logger.error("Error generating question: {}", e.getMessage(), e);
             return createFallbackQuestion(questionNumber);
         }
     }
 
-    private String getContextForTopic(String topic) {
+    private String getTopicContext(String topic) {
         try {
-            SearchRequest searchRequest = SearchRequest
-                    .builder()
+            SearchRequest request = SearchRequest.builder()
                     .query(topic + " Kotlin programming")
                     .topK(maxContextDocuments)
                     .similarityThreshold(0.5)
                     .build();
 
-            List<Document> documents = vectorStore.similaritySearch(searchRequest);
+            List<Document> docs = vectorStore.similaritySearch(request);
             
-            if (documents.isEmpty()) {
+            if (docs.isEmpty()) {
                 return "";
             }
 
-            String context = documents.stream()
+            return docs.stream()
                     .map(Document::getText)
-                    .limit(1) // Keep it simple
-                    .reduce((a, b) -> a + "\n\n" + b)
+                    .findFirst()
+                    .map(text -> "Reference material:\n" + text.substring(0, Math.min(text.length(), 800)))
                     .orElse("");
 
-            return context.isEmpty() ? "" : "Reference material:\n" + context;
-
         } catch (Exception e) {
-            logger.warn("Could not retrieve context for topic {}: {}", topic, e.getMessage());
+            logger.warn("Could not get context for topic {}: {}", topic, e.getMessage());
             return "";
         }
     }
 
-    private String generateQuestionJson(String topic, String difficulty, boolean includeCode, String contextSection) {
+    private String callAiForQuestion(String topic, String difficulty, boolean includeCode, String context) {
         String codeInstruction = includeCode 
-            ? "Include a relevant Kotlin code snippet that the question is based on"
-            : "Do not include a code snippet, make it a conceptual question";
+            ? "Include a relevant Kotlin code snippet"
+            : "Make it a conceptual question without code";
+        
+        String codeSnippet = includeCode ? "code snippet here" : "";
 
-        PromptTemplate promptTemplate = new PromptTemplate(QUIZ_GENERATION_PROMPT);
-        Map<String, Object> promptVariables = Map.of(
+        PromptTemplate template = new PromptTemplate(QUIZ_PROMPT);
+        Map<String, Object> variables = Map.of(
                 "topic", topic,
                 "difficulty", difficulty,
-                "includeCode", includeCode,
                 "codeInstruction", codeInstruction,
-                "context_section", contextSection);
+                "codeSnippet", codeSnippet,
+                "correctLetter", "A",
+                "context", context
+        );
 
-        Prompt prompt = promptTemplate.create(promptVariables);
-        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(prompt);
-
-        return response.getResult().getOutput().getText().trim();
+        Prompt prompt = template.create(variables);
+        return chatModel.call(prompt).getResult().getOutput().getText().trim();
     }
 
-    private QuizQuestion parseQuestionFromJson(String jsonResponse, int questionNumber) throws JsonProcessingException {
-        // Clean the JSON response
-        String cleanJson = jsonResponse;
-        if (cleanJson.startsWith("```json")) {
-            cleanJson = cleanJson.substring(7);
-        }
-        if (cleanJson.endsWith("```")) {
-            cleanJson = cleanJson.substring(0, cleanJson.length() - 3);
-        }
-        cleanJson = cleanJson.trim();
+    private QuizQuestion parseQuestionJson(String jsonResponse, int questionNumber) throws JsonProcessingException {
+        // Clean JSON response
+        String cleanJson = jsonResponse
+                .replaceFirst("^```json\\s*", "")
+                .replaceFirst("```\\s*$", "")
+                .trim();
 
-        JsonNode jsonNode = objectMapper.readTree(cleanJson);
+        JsonNode json = objectMapper.readTree(cleanJson);
 
-        String question = jsonNode.get("question").asText();
-        String codeSnippet = jsonNode.has("codeSnippet") ? jsonNode.get("codeSnippet").asText() : "";
-        String correctAnswer = jsonNode.get("correctAnswer").asText();
-        String explanation = jsonNode.get("explanation").asText();
+        String question = json.get("question").asText();
+        String codeSnippet = json.has("codeSnippet") ? json.get("codeSnippet").asText() : "";
+        String correctAnswer = json.get("correctAnswer").asText();
+        String explanation = json.get("explanation").asText();
 
-        JsonNode optionsNode = jsonNode.get("options");
-        List<QuizOption> options = new ArrayList<>();
-        
-        options.add(new QuizOption("A", optionsNode.get("A").asText()));
-        options.add(new QuizOption("B", optionsNode.get("B").asText()));
-        options.add(new QuizOption("C", optionsNode.get("C").asText()));
-        options.add(new QuizOption("D", optionsNode.get("D").asText()));
+        JsonNode optionsNode = json.get("options");
+        List<QuizOption> options = List.of(
+            new QuizOption("A", optionsNode.get("A").asText()),
+            new QuizOption("B", optionsNode.get("B").asText()),
+            new QuizOption("C", optionsNode.get("C").asText()),
+            new QuizOption("D", optionsNode.get("D").asText())
+        );
 
         return new QuizQuestion(questionNumber, question, codeSnippet, options, correctAnswer, explanation);
     }
@@ -261,67 +297,25 @@ public class KotlinQuizService {
             new QuizOption("D", "let")
         );
 
-        return new QuizQuestion(questionNumber, 
+        return new QuizQuestion(
+            questionNumber, 
             "Which keyword is used to declare an immutable variable in Kotlin?",
-            "", options, "B",
-            "val is used for immutable variables (read-only), while var is for mutable variables.");
+            "", 
+            options, 
+            "B",
+            "val is used for immutable variables (read-only), while var is for mutable variables."
+        );
     }
 
-    @Data
-    @AllArgsConstructor
-    private static class QuizTopic {
-        private String name;
-        private double codeSnippetProbability;
-    }
-
-    @Data
-    private static class QuizSession {
-        private String sessionId;
-        private String difficulty;
-        private List<QuizQuestion> questions;
-        private int currentQuestionIndex;
-        private int score;
-        private long startTime;
-        private long completionTime;
-        private boolean completed;
-
-        public QuizSession(String sessionId, String difficulty) {
-            this.sessionId = sessionId;
-            this.difficulty = difficulty;
-            this.questions = new ArrayList<>();
-            this.currentQuestionIndex = 0;
-            this.score = 0;
-            this.startTime = System.currentTimeMillis();
-            this.completed = false;
-        }
-
-        public void addQuestion(QuizQuestion question) {
-            questions.add(question);
-        }
-
-        public QuizQuestion getCurrentQuestion() {
-            if (currentQuestionIndex < questions.size()) {
-                return questions.get(currentQuestionIndex);
-            }
-            return null;
-        }
-
-        public int getCurrentQuestionNumber() {
-            return currentQuestionIndex + 1;
-        }
-
-        public void incrementScore() {
-            score++;
-            currentQuestionIndex++;
-        }
-
-        public void moveToNext() {
-            currentQuestionIndex++;
-        }
-
-        public void complete() {
-            completed = true;
-            completionTime = System.currentTimeMillis() - startTime;
-        }
+    private QuizSessionSummary createSessionSummary(QuizSession session) {
+        int correctAnswers = session.getScore();
+        long completionTimeMs = session.getSessionDurationMinutes() * 60 * 1000;
+        
+        return QuizSessionSummary.create(
+            session.getSessionId(),
+            session.getDifficulty(),
+            correctAnswers,
+            completionTimeMs
+        );
     }
 }
