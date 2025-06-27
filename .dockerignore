@@ -1,0 +1,45 @@
+# Ignore Git files
+.git
+.gitignore
+.gitattributes
+
+# Ignore IDE files
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore build artifacts
+target/
+!target/*.jar
+*.log
+
+# Ignore test files
+src/test/
+
+# Ignore PDF documents (since embeddings are already created)
+src/main/resources/*.pdf
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore local configuration files
+keys.properties
+application-local.properties
+
+# Ignore Docker files (not needed in container)
+Dockerfile
+.dockerignore
+
+# Ignore CI/CD files
+.github/
+render.yaml
+
+# Ignore Maven wrapper jar (we copy it separately)
+.mvn/wrapper/maven-wrapper.jar
