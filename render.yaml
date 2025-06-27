@@ -27,3 +27,9 @@ services:
         sync: false
       - key: REDIS_SSL_ENABLED
         value: true
+      # CRITICAL: Disable embedding generation in production
+      - key: EMBEDDING_GENERATION_ENABLED
+        value: false
+      # Memory optimization
+      - key: JAVA_OPTS
+        value: "-Xmx350m -Xms128m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
