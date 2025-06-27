@@ -3,7 +3,7 @@ services:
     name: kotlin-ai-chatbot
     env: docker
     dockerfilePath: ./Dockerfile
-    plan: standard
+    plan: free
     region: oregon
     buildCommand: ""
     startCommand: ""
