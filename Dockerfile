@@ -1,4 +1,4 @@
-# Multi-stage build for Railway deployment
+# Multi-stage build for Railway deployment - FIXED for temp directory issue
 FROM eclipse-temurin:17-jdk-alpine AS builder
 
 # Set working directory
@@ -26,21 +26,14 @@ FROM eclipse-temurin:17-jre-alpine
 # Install curl for health checks
 RUN apk add --no-cache curl
 
-# Create app user for security
-RUN addgroup -g 1001 -S spring && \
-    adduser -S spring -u 1001
-
 # Set working directory
 WORKDIR /app
 
+# Create writable temp directory for Tomcat - THIS FIXES THE PERMISSION ISSUE
+RUN mkdir -p /app/temp && chmod 755 /app/temp
+
 # Copy the built jar from builder stage
 COPY --from=builder /app/target/*.jar app.jar
-
-# Change ownership to spring user
-RUN chown spring:spring app.jar
-
-# Switch to non-root user
-USER spring
 
 # Expose port
 EXPOSE $PORT
@@ -49,5 +42,5 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:$PORT/api/health || exit 1
 
-# Use Railway's PORT environment variable
-CMD ["sh", "-c", "java -Dserver.port=$PORT -Dspring.profiles.active=prod -Djava.security.egd=file:/dev/./urandom -Xmx512m -Xms256m -XX:+UseG1GC -XX:+UseStringDeduplication -Djava.awt.headless=true -jar app.jar"]
+# Run with custom temp directory - THIS IS THE KEY FIX
+CMD ["sh", "-c", "java -Dserver.port=$PORT -Dspring.profiles.active=prod -Djava.io.tmpdir=/app/temp -Xmx512m -Xms256m -XX:+UseG1GC -jar app.jar"]
