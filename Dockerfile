@@ -1,17 +1,17 @@
-# Use OpenJDK 17 slim image for smaller size on free tier
-FROM openjdk:17-jdk-slim
+# Multi-stage build for Railway deployment
+FROM eclipse-temurin:17-jdk-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Install curl for health checks (optional but useful)
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
-# Copy Maven wrapper and pom.xml first for better caching
+# Copy Maven wrapper and pom.xml
 COPY .mvn .mvn
 COPY mvnw mvnw.cmd pom.xml ./
 
-# Download dependencies (this layer will be cached if pom.xml doesn't change)
+# Make mvnw executable
+RUN chmod +x mvnw
+
+# Download dependencies
 RUN ./mvnw dependency:go-offline -B
 
 # Copy source code
@@ -20,11 +20,21 @@ COPY src ./src
 # Build the application
 RUN ./mvnw clean package -DskipTests -B
 
-# Create a non-root user for security
-RUN addgroup --system spring && adduser --system spring --ingroup spring
+# Production stage
+FROM eclipse-temurin:17-jre-alpine
 
-# Copy the built jar
-RUN cp target/*.jar app.jar
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Create app user for security
+RUN addgroup -g 1001 -S spring && \
+    adduser -S spring -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built jar from builder stage
+COPY --from=builder /app/target/*.jar app.jar
 
 # Change ownership to spring user
 RUN chown spring:spring app.jar
@@ -32,12 +42,12 @@ RUN chown spring:spring app.jar
 # Switch to non-root user
 USER spring
 
-# Expose port 8080 (Render will map this to external port)
-EXPOSE 8080
+# Expose port
+EXPOSE $PORT
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:8080/api/health || exit 1
+  CMD curl -f http://localhost:$PORT/api/health || exit 1
 
-# Run the application with production profile
-ENTRYPOINT ["java", "-Dspring.profiles.active=prod", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/app.jar"]
+# Use Railway's PORT environment variable
+CMD ["sh", "-c", "java -Dserver.port=$PORT -Dspring.profiles.active=prod -Djava.security.egd=file:/dev/./urandom -Xmx512m -Xms256m -XX:+UseG1GC -XX:+UseStringDeduplication -Djava.awt.headless=true -jar app.jar"]
