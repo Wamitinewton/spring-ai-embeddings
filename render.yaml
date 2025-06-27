@@ -2,92 +2,32 @@ services:
   - type: web
     name: kotlin-ai-chatbot
     runtime: docker
-    region: oregon  # Choose closest region to your users
     plan: free
     
-    # Build configuration
     dockerfilePath: ./Dockerfile
-    dockerContext: .
     
-    # Port configuration
-    port: 8080
-    
-    # Health check endpoint
     healthCheckPath: /api/health
     
-    # Environment variables for production
     envVars:
-      # Spring profiles
       - key: SPRING_PROFILES_ACTIVE
         value: prod
       
-      # Server configuration  
-      - key: SERVER_PORT
-        value: 8080
-      
-      # OpenAI Configuration
       - key: OPENAI_API_KEY
-        fromService:
-          type: secret
-          name: openai-api-key
-          property: value
+        sync: false
       
-      # Qdrant Configuration
-      - key: QDRANT_HOST_URL
-        fromService:
-          type: secret
-          name: qdrant-host-url
-          property: value
-      
+      - key: QDRANT_HOST
+        sync: false
       - key: QDRANT_API_KEY
-        fromService:
-          type: secret
-          name: qdrant-api-key
-          property: value
+        sync: false
       
-      # Redis Configuration
-      - key: REDIS_HOST_URL
-        fromService:
-          type: secret
-          name: redis-host-url
-          property: value
-      
+      - key: REDIS_HOST
+        sync: false
       - key: REDIS_PORT
-        fromService:
-          type: secret
-          name: redis-port
-          property: value
-      
+        value: "10457"
       - key: REDIS_PASSWORD
-        fromService:
-          type: secret
-          name: redis-password
-          property: value
+        sync: false
+      - key: REDIS_SSL
+        value: "true"
       
-      # JVM Options for free tier (512MB RAM limit)
       - key: JAVA_OPTS
-        value: "-Xmx400m -Xms200m -XX:+UseG1GC -XX:+UseStringDeduplication -Djava.awt.headless=true"
-      
-      # Application settings for production
-      - key: APP_INITIALIZATION_AUTO_LOAD_PDFS
-        value: "false"
-      
-      - key: APP_INITIALIZATION_ENABLE_EMBEDDING_GENERATION
-        value: "false"
-    
-    # Deployment configuration
-    numInstances: 1
-    
-    # Auto-deploy on push to main branch
-    autoDeploy: true
-    
-    # Build command (optional, since we're using Docker)
-    # buildCommand: ./mvnw clean package -DskipTests
-    
-    # Start command is handled by Dockerfile ENTRYPOINT
-    
-    # Disk storage (for logs, temporary files)
-    disk:
-      name: kotlin-ai-chatbot-disk
-      mountPath: /tmp
-      sizeGB: 1
+        value: "-Xmx350m -Xms128m"

@@ -1,7 +1,6 @@
 package com.spring.kotlin_ai_chatbot.config;
 
 import java.time.Duration;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,7 +13,6 @@ import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactor
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,13 +27,13 @@ public class RedisConfig {
     @Value("${spring.data.redis.host}")
     private String redisHost;
 
-    @Value("${spring.data.redis.port}")
+    @Value("${spring.data.redis.port:6379}")
     private int redisPort;
 
-    @Value("${spring.data.redis.password}")
+    @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
-    @Value("${spring.data.redis.ssl.enabled:true}")
+    @Value("${spring.data.redis.ssl.enabled:false}")
     private boolean sslEnabled;
 
     @Bean
@@ -45,11 +43,14 @@ public class RedisConfig {
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
         redisConfig.setHostName(redisHost);
         redisConfig.setPort(redisPort);
-        redisConfig.setPassword(redisPassword);
+        
+        if (redisPassword != null && !redisPassword.trim().isEmpty()) {
+            redisConfig.setPassword(redisPassword);
+        }
 
         LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder = LettuceClientConfiguration
                 .builder()
-                .commandTimeout(Duration.ofSeconds(10))
+                .commandTimeout(Duration.ofSeconds(5))
                 .shutdownTimeout(Duration.ofMillis(100));
 
         if (sslEnabled) {
@@ -57,7 +58,6 @@ public class RedisConfig {
         }
 
         LettuceClientConfiguration clientConfig = clientConfigBuilder.build();
-
         return new LettuceConnectionFactory(redisConfig, clientConfig);
     }
 
@@ -83,11 +83,10 @@ public class RedisConfig {
         template.setHashKeySerializer(stringSerializer);
         template.setValueSerializer(jsonSerializer);
         template.setHashValueSerializer(jsonSerializer);
-
         template.setDefaultSerializer(jsonSerializer);
         template.afterPropertiesSet();
 
-        logger.info("Redis template configured with JSON serialization and type information");
+        logger.info("Redis template configured successfully");
         return template;
     }
 }
