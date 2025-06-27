@@ -2,9 +2,15 @@ services:
   - type: web
     name: kotlin-ai-chatbot
     runtime: docker
+    region: oregon 
     plan: free
     
+    # Build configuration
     dockerfilePath: ./Dockerfile
+    dockerContext: .
+    
+    # Port configuration
+    port: 8080
     
     healthCheckPath: /api/health
     
@@ -12,22 +18,41 @@ services:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
       
+      - key: SERVER_PORT
+        value: 8080
+      
       - key: OPENAI_API_KEY
         sync: false
       
       - key: QDRANT_HOST
         sync: false
+      
       - key: QDRANT_API_KEY
         sync: false
       
       - key: REDIS_HOST
         sync: false
+      
       - key: REDIS_PORT
-        value: "10457"
+        sync: false
+      
       - key: REDIS_PASSWORD
         sync: false
-      - key: REDIS_SSL
-        value: "true"
       
       - key: JAVA_OPTS
-        value: "-Xmx350m -Xms128m"
+        value: "-Xmx400m -Xms200m -XX:+UseG1GC -XX:+UseStringDeduplication -Djava.awt.headless=true"
+      
+      - key: APP_INITIALIZATION_AUTO_LOAD_PDFS
+        value: "false"
+      
+      - key: APP_INITIALIZATION_ENABLE_EMBEDDING_GENERATION
+        value: "false"
+    
+    numInstances: 1
+    
+    autoDeploy: true
+
+    disk:
+      name: kotlin-ai-chatbot-disk
+      mountPath: /tmp
+      sizeGB: 1
