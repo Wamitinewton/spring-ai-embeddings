@@ -1,0 +1,38 @@
+# Ignore build artifacts
+target/
+*.jar
+*.war
+*.ear
+
+# Ignore IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore Git
+.git/
+.gitignore
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore local configuration
+keys.properties
+application-local.properties
+
+# Ignore test files
+src/test/
+
+# Ignore Maven wrapper jar (we'll download it)
+.mvn/wrapper/maven-wrapper.jar
+
+# Ignore logs
+logs/
+*.log
