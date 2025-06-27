@@ -25,22 +25,22 @@ public class InitializationService implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        // logger.info(" Initializing Multi-Language Programming Assistant");
-        // logger.info(" Auto-load PDFs: {}", autoLoadPdfs);
-        // logger.info(" Enable Embedding Generation: {}", enableEmbeddingGeneration);
+        logger.info(" Initializing Multi-Language Programming Assistant");
+        logger.info(" Auto-load PDFs: {}", autoLoadPdfs);
+        logger.info(" Enable Embedding Generation: {}", enableEmbeddingGeneration);
         
-        // if (!enableEmbeddingGeneration) {
-        //     logger.info("⏸ Embedding generation is disabled. The application will use existing embeddings or work without document context.");
-        //     logger.info(" To enable embedding generation, set app.initialization.enable-embedding-generation=true");
-        //     return;
-        // }
+        if (!enableEmbeddingGeneration) {
+            logger.info("⏸ Embedding generation is disabled. The application will use existing embeddings or work without document context.");
+            logger.info(" To enable embedding generation, set app.initialization.enable-embedding-generation=true");
+            return;
+        }
 
-        // if (autoLoadPdfs) {
-        //     loadAllDocuments();
-        // } else {
-        //     logger.info(" Auto-loading of PDFs is disabled. Documents can be loaded manually via the admin endpoints.");
-        //     logger.info(" To enable auto-loading, set app.initialization.auto-load-pdfs=true");
-        // }
+        if (autoLoadPdfs) {
+            loadAllDocuments();
+        } else {
+            logger.info(" Auto-loading of PDFs is disabled. Documents can be loaded manually via the admin endpoints.");
+            logger.info(" To enable auto-loading, set app.initialization.auto-load-pdfs=true");
+        }
     }
 
   
