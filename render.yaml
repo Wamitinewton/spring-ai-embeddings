@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: kotlin-ai-chatbot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    region: oregon
+    buildCommand: ""
+    startCommand: ""
+    healthCheckPath: /api/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: PORT
+        value: 8080
+      - key: OPEN_AI_KEY
+        sync: false 
+      - key: QDRANT_HOST_URL
+        sync: false 
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: REDIS_HOST_URL
+        sync: false
+      - key: REDIS_PORT
+        value: 6380
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: REDIS_SSL_ENABLED
+        value: true
