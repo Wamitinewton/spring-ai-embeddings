@@ -1,4 +1,9 @@
-FROM openjdk:17-jdk-alpine
+FROM openjdk:17-jdk-slim
+
+# Install required system libraries
+RUN apt-get update && apt-get install -y \
+    libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -6,6 +11,9 @@ WORKDIR /app
 # Copy Maven wrapper and pom.xml first for better caching
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
+
+# Make mvnw executable
+RUN chmod +x ./mvnw
 
 RUN ./mvnw dependency:go-offline -B
 
